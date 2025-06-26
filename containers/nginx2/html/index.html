@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用户BBB专属页面</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .container {
+            text-align: center;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 40px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        h1 {
+            font-size: 3em;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        .user-badge {
+            background: #4ecdc4;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-size: 1.2em;
+            font-weight: bold;
+            margin: 20px 0;
+            display: inline-block;
+        }
+        .info {
+            font-size: 1.1em;
+            margin: 20px 0;
+            opacity: 0.9;
+        }
+        .port-info {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .success-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="success-icon">🌟</div>
+        <h1>欢迎来到用户BBB的专属空间</h1>
+        <div class="user-badge">USER: BBB</div>
+        <div class="info">
+            <p>太棒了！您已成功通过HTTP VPN转发器访问此页面</p>
+            <p>这证明用户隔离和端口路由工作完美</p>
+        </div>
+        <div class="port-info">
+            <strong>容器信息：</strong><br>
+            端口: 8080 (内部80)<br>
+            容器: nginx-user-bbb<br>
+            绑定: 127.0.0.1:8080 (仅本地访问)
+        </div>
+        <div class="info">
+            <p>🛡️ 安全验证通过：用户BBB只能看到属于自己的内容</p>
+            <p>🔄 转发器成功将您路由到正确的容器！</p>
+        </div>
+    </div>
+</body>
+</html> 

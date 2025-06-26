@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  nginx2:
+    image: docker.m.daocloud.io/nginx
+    container_name: nginx-user-bbb
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - ./html:/usr/share/nginx/html
+    restart: unless-stopped
+    networks:
+      - nginx-network
+
+networks:
+  nginx-network:
+    driver: bridge 

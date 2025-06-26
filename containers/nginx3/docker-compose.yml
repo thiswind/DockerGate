@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  nginx3:
+    image: docker.m.daocloud.io/nginx
+    container_name: nginx-user-ccc
+    ports:
+      - "127.0.0.1:9090:80"
+    volumes:
+      - ./html:/usr/share/nginx/html
+    restart: unless-stopped
+    networks:
+      - nginx-network
+
+networks:
+  nginx-network:
+    driver: bridge 
