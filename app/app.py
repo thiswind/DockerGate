@@ -49,7 +49,7 @@ def generate_token(username):
     payload = {
         'username': username,
         'target_port': USERS[username]['target_port'],
-        'exp': datetime.utcnow() + timedelta(hours=2),
+        'exp': datetime.utcnow() + timedelta(minutes=30),  # 改为30分钟
         'iat': datetime.utcnow()
     }
     return jwt.encode(payload, app.secret_key, algorithm='HS256')
@@ -85,32 +85,47 @@ def login():
     # 加载现有的认证会话
     auth_data = load_auth_sessions()
     
+    # 踢出该用户的所有现有会话（实现单用户登录）
+    sessions_to_remove = []
+    for session_id_old, session in auth_data['sessions'].items():
+        if session.get('username') == username:
+            sessions_to_remove.append(session_id_old)
+    
+    for session_id_old in sessions_to_remove:
+        del auth_data['sessions'][session_id_old]
+        print(f"踢出用户 {username} 的旧会话: {session_id_old}")
+    
     # 创建会话ID
     session_id = f"session_{username}_{int(time.time())}"
+    current_time = datetime.utcnow()
     
-    # 添加新的认证会话
+    # 添加新的认证会话（使用滑动超时）
     auth_data['sessions'][session_id] = {
         'username': username,
         'token': token,
         'target_port': USERS[username]['target_port'],
-        'created_at': datetime.utcnow().isoformat(),
-        'expires_at': (datetime.utcnow() + timedelta(hours=2)).isoformat(),
+        'created_at': current_time.isoformat(),
+        'last_activity': current_time.isoformat(),  # 新增：最后活动时间
+        'timeout_minutes': 30,  # 新增：超时时间（分钟）
         'active': True
     }
     
-    # 清理过期的会话
-    current_time = datetime.utcnow()
+    # 清理所有过期的会话（使用滑动超时）
     expired_sessions = []
     for sid, session in auth_data['sessions'].items():
         try:
-            expires_at = datetime.fromisoformat(session['expires_at'])
-            if expires_at < current_time:
+            last_activity = datetime.fromisoformat(session.get('last_activity', session.get('created_at')))
+            timeout_minutes = session.get('timeout_minutes', 30)
+            if (current_time - last_activity).total_seconds() > timeout_minutes * 60:
                 expired_sessions.append(sid)
         except:
             expired_sessions.append(sid)
     
     for sid in expired_sessions:
-        del auth_data['sessions'][sid]
+        if sid in auth_data['sessions']:
+            expired_username = auth_data['sessions'][sid].get('username', 'unknown')
+            del auth_data['sessions'][sid]
+            print(f"清理过期会话: {sid} (用户: {expired_username})")
     
     # 保存认证会话
     if not save_auth_sessions(auth_data):
@@ -123,7 +138,7 @@ def login():
     response.set_cookie(
         'auth_token', 
         token, 
-        max_age=7200,  # 2小时
+        max_age=1800,  # 30分钟
         httponly=False,  # 允许JavaScript访问，用于VPN注入
         secure=False,   # 开发环境设为False
         samesite='Lax'
@@ -131,7 +146,7 @@ def login():
     response.set_cookie(
         'session_id', 
         session_id, 
-        max_age=7200,
+        max_age=1800,  # 30分钟
         httponly=False,
         secure=False,
         samesite='Lax'
@@ -193,13 +208,16 @@ def api_get_user_sessions():
     current_time = datetime.utcnow()
     for session_id, session in auth_data['sessions'].items():
         try:
-            expires_at = datetime.fromisoformat(session['expires_at'])
-            if expires_at > current_time and session.get('active', True):
+            last_activity = datetime.fromisoformat(session.get('last_activity', session.get('created_at')))
+            timeout_minutes = session.get('timeout_minutes', 30)
+            if ((current_time - last_activity).total_seconds() <= timeout_minutes * 60 and 
+                session.get('active', True)):
                 active_sessions[session_id] = {
                     'username': session['username'],
                     'target_port': session['target_port'],
                     'created_at': session['created_at'],
-                    'expires_at': session['expires_at']
+                    'last_activity': session.get('last_activity'),
+                    'timeout_minutes': timeout_minutes
                 }
         except:
             continue
@@ -218,14 +236,17 @@ def status():
     current_time = datetime.utcnow()
     for session_id, session in auth_data['sessions'].items():
         try:
-            expires_at = datetime.fromisoformat(session['expires_at'])
-            if expires_at > current_time and session.get('active', True):
+            last_activity = datetime.fromisoformat(session.get('last_activity', session.get('created_at')))
+            timeout_minutes = session.get('timeout_minutes', 30)
+            if ((current_time - last_activity).total_seconds() <= timeout_minutes * 60 and 
+                session.get('active', True)):
                 active_sessions.append({
                     'session_id': session_id,
                     'username': session['username'],
                     'target_port': session['target_port'],
                     'created_at': session['created_at'],
-                    'expires_at': session['expires_at']
+                    'last_activity': session.get('last_activity'),
+                    'timeout_minutes': timeout_minutes
                 })
         except:
             continue
@@ -256,7 +277,8 @@ def status():
                 <strong>目标端口:</strong> {s['target_port']}<br>
                 <strong>会话ID:</strong> {s['session_id']}<br>
                 <strong>创建时间:</strong> {s['created_at']}<br>
-                <strong>过期时间:</strong> {s['expires_at']}
+                <strong>最后活动:</strong> {s['last_activity']}<br>
+                <strong>超时时间:</strong> {s['timeout_minutes']}分钟
             </div>
             ''' for s in active_sessions])}
             

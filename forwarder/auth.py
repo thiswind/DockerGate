@@ -25,6 +25,35 @@ class AuthManager:
         except (FileNotFoundError, json.JSONDecodeError):
             return {"sessions": {}, "user_mappings": {}}
     
+    def save_auth_sessions(self, data: Dict[str, Any]) -> bool:
+        """保存认证会话数据"""
+        try:
+            os.makedirs(os.path.dirname(self.auth_session_file), exist_ok=True)
+            with open(self.auth_session_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            return True
+        except Exception as e:
+            print(f"保存认证会话失败: {e}")
+            return False
+    
+    def update_session_activity(self, username: str, token: str) -> bool:
+        """更新会话活动时间"""
+        auth_sessions = self.load_auth_sessions()
+        current_time = datetime.utcnow()
+        
+        for session_id, session in auth_sessions['sessions'].items():
+            if (session.get('username') == username and 
+                session.get('token') == token and 
+                session.get('active', True)):
+                
+                # 更新最后活动时间
+                session['last_activity'] = current_time.isoformat()
+                self.save_auth_sessions(auth_sessions)
+                print(f"更新用户 {username} 的活动时间: {current_time.isoformat()}")
+                return True
+        
+        return False
+    
     def verify_jwt_token(self, token: str) -> Optional[Dict[str, Any]]:
         """验证JWT token"""
         try:
@@ -81,7 +110,7 @@ class AuthManager:
         auth_sessions = self.load_auth_sessions()
         username = payload.get('username')
         
-        # 查找对应的活跃会话
+        # 查找对应的活跃会话（使用滑动超时）
         active_session = None
         current_time = datetime.utcnow()
         
@@ -91,16 +120,27 @@ class AuthManager:
                 session.get('active', True)):
                 
                 try:
-                    expires_at = datetime.fromisoformat(session['expires_at'])
-                    if expires_at > current_time:
+                    # 使用滑动超时检查
+                    last_activity = datetime.fromisoformat(session.get('last_activity', session.get('created_at')))
+                    timeout_minutes = session.get('timeout_minutes', 30)
+                    
+                    if (current_time - last_activity).total_seconds() <= timeout_minutes * 60:
                         active_session = session
                         break
+                    else:
+                        print(f"用户 {username} 的会话已超时 ({timeout_minutes}分钟)")
+                        # 标记会话为非活跃
+                        session['active'] = False
+                        self.save_auth_sessions(auth_sessions)
                 except:
                     continue
         
         if not active_session:
             print(f"未找到用户 {username} 的活跃会话")
             return None
+        
+        # 更新最后活动时间
+        self.update_session_activity(username, token)
         
         print(f"用户 {username} 认证成功，目标端口: {payload.get('target_port')}")
         return payload
@@ -144,14 +184,16 @@ class AuthManager:
         if username in auth_sessions.get('user_mappings', {}):
             return auth_sessions['user_mappings'][username]['target_port']
         
-        # 从活跃会话中获取
+        # 从活跃会话中获取（使用滑动超时检查）
         current_time = datetime.utcnow()
         for session in auth_sessions['sessions'].values():
             if (session.get('username') == username and 
                 session.get('active', True)):
                 try:
-                    expires_at = datetime.fromisoformat(session['expires_at'])
-                    if expires_at > current_time:
+                    last_activity = datetime.fromisoformat(session.get('last_activity', session.get('created_at')))
+                    timeout_minutes = session.get('timeout_minutes', 30)
+                    
+                    if (current_time - last_activity).total_seconds() <= timeout_minutes * 60:
                         return session.get('target_port')
                 except:
                     continue

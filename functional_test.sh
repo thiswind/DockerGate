@@ -281,6 +281,130 @@ test_error_handling() {
     return 0
 }
 
+# 测试滑动超时机制
+test_sliding_timeout() {
+    print_user_info "测试滑动超时机制..."
+    
+    # 使用用户aaa进行滑动超时测试
+    local username="aaa"
+    local password="111"
+    
+    # 重新登录以获得干净的会话（单用户登录会清除旧会话）
+    print_info "重新登录用户 $username 以测试滑动超时..."
+    RESPONSE=$(curl -s -w "%{http_code}" -X POST http://localhost:3001/login \
+        -d "username=$username&password=$password" \
+        -c "sliding_test_cookies.txt" \
+        -o "sliding_test_login.html")
+    
+    if [ "$RESPONSE" != "302" ] && [ "$RESPONSE" != "200" ]; then
+        print_failure "滑动超时测试登录失败 (状态码: $RESPONSE)"
+        return 1
+    fi
+    
+    # 获取认证token
+    TOKEN=$(grep auth_token "sliding_test_cookies.txt" | awk '{print $7}' 2>/dev/null)
+    if [ -z "$TOKEN" ]; then
+        print_failure "滑动超时测试未获得认证token"
+        return 1
+    fi
+    
+    # 获取当前会话ID（最新的aaa会话）
+    SESSION_ID=$(grep -o "session_${username}_[0-9]*" "shared/auth_sessions.json" | tail -1)
+    if [ -z "$SESSION_ID" ]; then
+        print_failure "无法获取当前会话ID"
+        return 1
+    fi
+    print_info "追踪会话ID: $SESSION_ID"
+    
+    # 检查会话文件是否包含滑动超时字段
+    print_info "检查会话文件是否包含滑动超时字段..."
+    if [ -f "shared/auth_sessions.json" ]; then
+        if grep -q "last_activity" "shared/auth_sessions.json" && grep -q "timeout_minutes" "shared/auth_sessions.json"; then
+            print_success "会话文件包含滑动超时字段 (last_activity, timeout_minutes)"
+        else
+            print_failure "会话文件缺少滑动超时字段"
+            return 1
+        fi
+        
+        # 检查超时时间是否为30分钟
+        if grep -q '"timeout_minutes": 30' "shared/auth_sessions.json"; then
+            print_success "超时时间正确设置为30分钟"
+        else
+            print_failure "超时时间设置不正确"
+            return 1
+        fi
+    else
+        print_failure "会话文件不存在"
+        return 1
+    fi
+    
+    # 记录初始活动时间（针对特定会话）
+    INITIAL_ACTIVITY=$(grep -A 5 "$SESSION_ID" "shared/auth_sessions.json" | grep "last_activity" | cut -d'"' -f4)
+    if [ -z "$INITIAL_ACTIVITY" ]; then
+        print_failure "无法获取初始活动时间"
+        return 1
+    fi
+    print_info "初始活动时间: $INITIAL_ACTIVITY"
+    
+    # 等待1秒确保时间差异
+    sleep 1
+    
+    # 进行HTTP请求以触发活动时间更新
+    print_info "发送HTTP请求以触发活动时间更新..."
+    curl -s http://localhost:5001/ -H "Cookie: auth_token=$TOKEN" > /dev/null
+    
+    # 检查活动时间是否更新（针对特定会话）
+    UPDATED_ACTIVITY=$(grep -A 5 "$SESSION_ID" "shared/auth_sessions.json" | grep "last_activity" | cut -d'"' -f4)
+    if [ -z "$UPDATED_ACTIVITY" ]; then
+        print_failure "无法获取更新后的活动时间"
+        return 1
+    fi
+    
+    print_info "更新后活动时间: $UPDATED_ACTIVITY"
+    
+    if [ "$INITIAL_ACTIVITY" != "$UPDATED_ACTIVITY" ]; then
+        print_success "活动时间已成功更新 (滑动超时机制工作正常)"
+    else
+        print_failure "活动时间未更新 (滑动超时机制可能存在问题)"
+        return 1
+    fi
+    
+    # 检查状态页面是否正确显示滑动超时信息
+    print_info "检查状态页面是否显示滑动超时信息..."
+    STATUS_RESPONSE=$(curl -s http://localhost:3001/status)
+    
+    if echo "$STATUS_RESPONSE" | grep -q "最后活动" && echo "$STATUS_RESPONSE" | grep -q "超时时间.*30分钟"; then
+        print_success "状态页面正确显示滑动超时信息"
+    else
+        print_failure "状态页面未正确显示滑动超时信息"
+    fi
+    
+    # 测试单用户登录控制
+    print_info "测试单用户登录控制 (新登录应踢出旧会话)..."
+    
+    # 获取当前会话数量
+    SESSIONS_BEFORE=$(grep -c "session_${username}_" "shared/auth_sessions.json" 2>/dev/null || echo "0")
+    
+    # 再次登录同一用户
+    curl -s -X POST http://localhost:3001/login \
+        -d "username=$username&password=$password" \
+        -c "sliding_test_cookies2.txt" > /dev/null
+    
+    # 获取登录后的会话数量
+    SESSIONS_AFTER=$(grep -c "session_${username}_" "shared/auth_sessions.json" 2>/dev/null || echo "0")
+    
+    if [ "$SESSIONS_AFTER" = "1" ]; then
+        print_success "单用户登录控制工作正常 (只保留最新会话)"
+    else
+        print_failure "单用户登录控制可能存在问题 (会话数量: $SESSIONS_AFTER)"
+    fi
+    
+    # 清理测试文件
+    rm -f sliding_test_cookies.txt sliding_test_cookies2.txt sliding_test_login.html 2>/dev/null
+    
+    return 0
+}
+
 # 测试响应性能
 test_response_performance() {
     print_user_info "测试响应性能..."
@@ -348,8 +472,14 @@ main() {
         print_failure "错误处理测试失败"
     fi
     
-    # 7. 测试性能
-    print_test_header "7" "性能测试"
+    # 7. 测试滑动超时机制
+    print_test_header "7" "滑动超时测试"
+    if ! test_sliding_timeout; then
+        print_failure "滑动超时测试失败"
+    fi
+    
+    # 8. 测试性能
+    print_test_header "8" "性能测试"
     if ! test_response_performance; then
         print_failure "性能测试失败"
     fi
