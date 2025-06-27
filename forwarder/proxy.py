@@ -41,7 +41,7 @@ class HTTPVPNProxy:
             server_socket.listen(10)
             
             print("=" * 60)
-            print("HTTP VPN 转发器启动成功 (容器化模式)")
+            print("HTTP VPN 转发器启动成功 (简化模式)")
             print("=" * 60)
             print(f"监听端口: {self.listen_port}")
             print("用户路由映射:")
@@ -49,15 +49,16 @@ class HTTPVPNProxy:
             print("  bbb → nginx-user-bbb:80 (容器内部)")
             print("  ccc → nginx-user-ccc:80 (容器内部)")
             print("")
-            print("安全特性:")
+            print("简化特性:")
             print("  🔒 nginx容器完全不暴露到宿主机")
             print("  🛡️ 只能通过转发器访问")
             print("  🚫 127.0.0.1绕过已被阻止")
+            print("  ✨ 无dashboard，登录后直接进入容器")
+            print("  🎯 纯透明代理，无JavaScript注入")
             print("")
-            print("访问方式:")
-            print("  1. 先在 http://localhost:3001 登录")
-            print("  2. 登录成功后会自动跳转到转发器")
-            print("  3. 看到对应用户的专属页面")
+            print("使用方式:")
+            print("  1. 访问 http://localhost:3001 登录")
+            print("  2. 登录成功后直接显示用户专属容器内容")
             print("=" * 60)
             
             while self.running:
@@ -94,10 +95,7 @@ class HTTPVPNProxy:
             print(f"\n[{time.strftime('%H:%M:%S')}] 收到请求: {client_addr[0]} → {method} {path}")
             
             # 特殊路径处理
-            if path == '/dashboard':
-                self.handle_dashboard_request(client_socket, request_data)
-                return
-            elif path == '/favicon.ico':
+            if path == '/favicon.ico':
                 self.send_404_response(client_socket)
                 return
             
@@ -184,173 +182,7 @@ class HTTPVPNProxy:
         
         return "", "", ""
     
-    def handle_dashboard_request(self, client_socket: socket.socket, request_data: str):
-        """处理仪表板请求"""
-        # 认证请求
-        auth_payload = self.auth_manager.authenticate_request(request_data)
-        if not auth_payload:
-            self.send_redirect_to_login(client_socket)
-            return
-        
-        username = auth_payload.get('username')
-        target_port = auth_payload.get('target_port')
-        
-        # 生成仪表板页面
-        dashboard_html = self.generate_dashboard_html(username, target_port)
-        self.send_html_response(client_socket, dashboard_html)
-    
-    def generate_dashboard_html(self, username: str, target_port: int) -> str:
-        """生成用户仪表板页面"""
-        return f"""
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HTTP VPN 仪表板 - 用户 {username.upper()}</title>
-    <style>
-        body {{
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            margin: 0;
-            padding: 0;
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }}
-        .dashboard {{
-            text-align: center;
-            background: rgba(255, 255, 255, 0.1);
-            padding: 40px;
-            border-radius: 20px;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-            max-width: 600px;
-            width: 90%;
-        }}
-        h1 {{
-            font-size: 2.5em;
-            margin-bottom: 20px;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-        }}
-        .user-info {{
-            background: rgba(255, 255, 255, 0.2);
-            padding: 20px;
-            border-radius: 10px;
-            margin: 20px 0;
-        }}
-        .access-button {{
-            display: inline-block;
-            background: #4CAF50;
-            color: white;
-            padding: 15px 30px;
-            text-decoration: none;
-            border-radius: 10px;
-            font-size: 1.2em;
-            font-weight: bold;
-            margin: 10px;
-            transition: all 0.3s ease;
-            border: none;
-            cursor: pointer;
-        }}
-        .access-button:hover {{
-            background: #45a049;
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-        }}
-        .logout-button {{
-            background: #f44336;
-        }}
-        .logout-button:hover {{
-            background: #da190b;
-        }}
-        .info-section {{
-            background: rgba(255, 255, 255, 0.1);
-            padding: 20px;
-            border-radius: 10px;
-            margin: 20px 0;
-            text-align: left;
-        }}
-        .status-indicator {{
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            background: #4CAF50;
-            border-radius: 50%;
-            margin-right: 10px;
-            animation: pulse 2s infinite;
-        }}
-        @keyframes pulse {{
-            0% {{ opacity: 1; }}
-            50% {{ opacity: 0.5; }}
-            100% {{ opacity: 1; }}
-        }}
-    </style>
-</head>
-<body>
-    <div class="dashboard">
-        <h1>🚀 HTTP VPN 仪表板</h1>
-        
-        <div class="user-info">
-            <h2>欢迎，用户 {username.upper()}！</h2>
-            <p><span class="status-indicator"></span>连接状态：已认证</p>
-            <p>分配端口：{target_port}</p>
-            <p>VPN状态：活跃</p>
-        </div>
-        
-        <div>
-            <button onclick="accessContainer()" class="access-button">
-                访问我的专属容器
-            </button>
-            <a href="http://localhost:3001/logout" class="access-button logout-button">
-                退出登录
-            </a>
-        </div>
-        
-        <div class="info-section">
-            <h3>📋 系统信息</h3>
-            <p><strong>用户身份：</strong> {username}</p>
-            <p><strong>目标容器：</strong> nginx-user-{username}</p>
-            <p><strong>容器端口：</strong> 127.0.0.1:{target_port}</p>
-            <p><strong>转发器：</strong> HTTP VPN Proxy v1.0</p>
-        </div>
-        
-        <div class="info-section">
-            <h3>🔒 安全特性</h3>
-            <p>✅ JWT Token 认证</p>
-            <p>✅ 端口隔离保护</p>
-            <p>✅ 用户权限控制</p>
-            <p>✅ 透明代理转发</p>
-        </div>
-    </div>
-    
-    <script>
-        function getCookie(name) {{
-            const value = `; ${{document.cookie}}`;
-            const parts = value.split(`; ${{name}}=`);
-            if (parts.length === 2) return parts.pop().split(';').shift();
-            return null;
-        }}
-        
-        function accessContainer() {{
-            // 直接访问根路径，转发器会自动路由到正确的容器
-            window.location.href = '/';
-        }}
-        
-        // 定期检查认证状态
-        setInterval(function() {{
-            const token = getCookie('auth_token');
-            if (!token) {{
-                alert('会话已过期，请重新登录');
-                window.location.href = 'http://localhost:3001';
-            }}
-        }}, 60000); // 每分钟检查一次
-    </script>
-</body>
-</html>
-        """
+
     
     def forward_to_container(self, client_socket: socket.socket, target_port: int, 
                            clean_request: str, username: str):
@@ -438,105 +270,9 @@ class HTTPVPNProxy:
             return None
     
     def inject_auth_mechanism(self, response_data: bytes, username: str) -> bytes:
-        """在响应中注入认证机制"""
-        try:
-            response_str = response_data.decode('utf-8', errors='ignore')
-            
-            # 检查是否是HTML响应
-            if 'text/html' in response_str and '<head>' in response_str:
-                # 注入认证JavaScript代码
-                auth_script = f"""
-<script>
-// HTTP VPN 客户端认证注入 - 用户 {username}
-(function() {{
-    console.log('HTTP VPN 认证机制已注入 - 用户: {username}');
-    
-    // 获取当前认证token
-    function getAuthToken() {{
-        const value = `; ${{document.cookie}}`;
-        const parts = value.split(`; auth_token=`);
-        if (parts.length === 2) return parts.pop().split(';').shift();
-        return null;
-    }}
-    
-    const currentToken = getAuthToken();
-    if (!currentToken) {{
-        console.warn('未找到认证token，可能需要重新登录');
-        return;
-    }}
-    
-    // 拦截fetch请求
-    const originalFetch = window.fetch;
-    window.fetch = function(url, options = {{}}) {{
-        options.headers = options.headers || {{}};
-        options.headers['Authorization'] = 'Bearer ' + currentToken;
-        
-        console.log('拦截fetch请求:', url);
-        return originalFetch(url, options);
-    }};
-    
-    // 拦截XMLHttpRequest
-    const originalXHROpen = XMLHttpRequest.prototype.open;
-    XMLHttpRequest.prototype.open = function(method, url, ...args) {{
-        const result = originalXHROpen.apply(this, arguments);
-        this.setRequestHeader('Authorization', 'Bearer ' + currentToken);
-        
-        console.log('拦截XHR请求:', method, url);
-        return result;
-    }};
-    
-    // 拦截表单提交
-    document.addEventListener('submit', function(e) {{
-        const form = e.target;
-        console.log('拦截表单提交:', form.action);
-        
-        // 添加隐藏的认证字段
-        const tokenInput = document.createElement('input');
-        tokenInput.type = 'hidden';
-        tokenInput.name = '__auth_token';
-        tokenInput.value = currentToken;
-        form.appendChild(tokenInput);
-    }});
-    
-    // 拦截链接点击
-    document.addEventListener('click', function(e) {{
-        if (e.target.tagName === 'A' && e.target.href) {{
-            console.log('拦截链接点击:', e.target.href);
-            
-            // 如果是相对链接，添加认证参数
-            if (!e.target.href.startsWith('http')) {{
-                const url = new URL(e.target.href, window.location.origin);
-                url.searchParams.set('__auth_token', currentToken);
-                e.target.href = url.toString();
-            }}
-        }}
-    }});
-    
-    console.log('HTTP VPN 认证机制设置完成');
-}})();
-</script>
-"""
-                
-                # 在</head>前插入认证脚本
-                response_str = response_str.replace('</head>', auth_script + '</head>')
-                response_data = response_str.encode('utf-8')
-                
-                # 更新Content-Length
-                headers_end = response_data.find(b'\r\n\r\n')
-                if headers_end != -1:
-                    headers_part = response_data[:headers_end].decode('utf-8')
-                    body_part = response_data[headers_end + 4:]
-                    
-                    # 更新Content-Length
-                    new_length = len(body_part)
-                    headers_part = re.sub(r'Content-Length:\s*\d+', f'Content-Length: {new_length}', 
-                                        headers_part, flags=re.IGNORECASE)
-                    
-                    response_data = headers_part.encode('utf-8') + b'\r\n\r\n' + body_part
-        
-        except Exception as e:
-            print(f"注入认证机制时出错: {e}")
-        
+        """简化的HTTP响应处理 - 基本透明代理"""
+        # 简化后只做基本的透明代理，不注入复杂的JavaScript
+        # 认证由转发器在请求层面处理，无需在响应中注入代码
         return response_data
     
     def send_html_response(self, client_socket: socket.socket, html_content: str):

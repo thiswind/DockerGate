@@ -1,0 +1,21 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>401 - 认证失败</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 100px; }
+        .error { color: #d32f2f; font-size: 1.5em; }
+        .message { margin: 20px; color: #666; }
+        .link { color: #1976d2; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="error">🔒 401 - 认证失败</div>
+    <div class="message">
+        您需要先登录才能访问此页面<br>
+        <a href="http://localhost:3001" class="link">点击这里登录</a>
+    </div>
+</body>
+</html>
+        
