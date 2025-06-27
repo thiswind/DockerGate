@@ -6,7 +6,7 @@ HTTP VPN 转发器启动脚本
 from forwarder.proxy import HTTPVPNProxy
 
 if __name__ == "__main__":
-    proxy = HTTPVPNProxy(listen_port=5000)
+    proxy = HTTPVPNProxy(listen_port=5001)
     try:
         proxy.start()
     except KeyboardInterrupt:

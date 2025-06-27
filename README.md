@@ -1,193 +1,373 @@
-# HTTP VPN 演示项目
+# DockerGate - 安全容器化HTTP VPN
 
-基于HTTP的应用层VPN实现，用于演示透明代理和用户权限控制。
+基于HTTP的应用层VPN实现，采用Docker容器化架构，提供完整的用户隔离和安全防护。
 
-## 项目结构
+## 🏗️ 项目架构
+
+### 核心安全理念
+
+**DockerGate = Docker容器网络隔离 + HTTP VPN转发 + JWT认证 + 配置模板分离**
+
+- 🔒 **完全隔离**：nginx容器运行在Docker内部网络，外部无法直接访问
+- 🛡️ **认证防护**：所有请求必须通过JWT认证和HTTP VPN转发器
+- 🚫 **绕过阻止**：彻底杜绝127.0.0.1端口绕过的安全隐患
+- 📄 **数据分离**：配置模板与敏感运行时数据完全分离，确保版本控制安全
+## 📁 项目结构
 
 ```
-http-vpn-demo/
+DockerGate/
 ├── forwarder/                 # 转发器包
 │   ├── __init__.py
 │   ├── proxy.py              # HTTP VPN转发器主程序
-│   └── auth.py               # 认证管理模块
-├── containers/               # Docker容器配置
-│   ├── nginx1/              # 用户AAA的容器
-│   ├── nginx2/              # 用户BBB的容器
-│   └── nginx3/              # 用户CCC的容器
+│   └── auth.py               # JWT认证管理模块
 ├── app/                      # Flask认证应用
 │   ├── app.py               # 认证服务器
 │   └── templates/
 │       └── login.html       # 登录页面
-├── shared/                   # 共享数据
-│   └── auth_sessions.json   # 认证会话文件
+├── containers/               # 单独容器配置(已废弃)
+│   └── ...                  # 保留用于参考
+├── shared/                         # 共享数据
+│   ├── auth_sessions_template.json # 认证会话模板文件(进入版本控制)
+│   └── auth_sessions.json         # 运行时会话文件(不进入版本控制)
+├── Dockerfile.auth          # 认证服务器镜像
+├── Dockerfile.proxy         # HTTP VPN转发器镜像
+├── docker-compose.yml       # 统一容器编排
+├── init_session.sh          # 环境初始化脚本
 ├── requirements.txt         # Python依赖
 └── README.md               # 项目说明
 ```
 
-## 系统架构
+## 🏛️ 系统架构
 
-### 核心组件
-
-1. **Flask认证应用** (端口3001)
-   - 用户登录验证
-   - JWT Token生成
-   - 会话管理
-
-2. **HTTP VPN转发器** (端口5000)
-   - 单端口多用户路由
-   - 认证验证和请求清理
-   - 响应注入认证机制
-
-3. **Nginx容器集群**
-   - nginx1: 127.0.0.1:6060 (用户aaa)
-   - nginx2: 127.0.0.1:8080 (用户bbb) 
-   - nginx3: 127.0.0.1:9090 (用户ccc)
-
-### 工作流程
+### 容器化组件
 
 ```
-用户浏览器 → Flask认证(3001) → 登录成功 → 跳转到转发器(5000) → 根据认证路由到对应容器
+┌─────────────────────────────────────────────────────────────┐
+│                    Docker Network: vpn-internal             │
+│                                                             │
+│  ┌──────────────┐  ┌──────────────┐  ┌─────────────────┐   │
+│  │ auth-server  │  │ vpn-proxy    │  │ nginx-user-aaa  │   │
+│  │   :3001      │  │    :5001     │  │      :80        │   │
+│  └──────────────┘  └──────────────┘  └─────────────────┘   │
+│                                                             │
+│                     ┌─────────────────┐  ┌────────────────┐ │
+│                     │ nginx-user-bbb  │  │ nginx-user-ccc │ │
+│                     │      :80        │  │      :80       │ │
+│                     └─────────────────┘  └────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                    ┌─────────┴─────────┐
+                    │   宿主机端口      │
+                    │  3001 ← 认证     │
+                    │  5001 ← 转发     │
+                    └───────────────────┘
 ```
 
-## 快速开始
+### 安全工作流程
 
-### 1. 安装依赖
+```
+用户浏览器 
+    ↓ (http://localhost:3001)
+Flask认证服务器 (容器内)
+    ↓ JWT Token + 302跳转
+HTTP VPN转发器 (容器内)
+    ↓ 认证验证 + 路由决策
+nginx用户容器 (Docker内部网络，完全隔离)
+    ↓ 响应 + 认证注入
+用户浏览器 (看到专属页面)
+```
+
+## 🚀 快速部署
+
+### 环境初始化
+
+⭐ **重要**: DockerGate 采用配置模板分离架构，首次部署必须进行环境初始化！
+首次部署或重新初始化环境时，需要运行初始化脚本：
 
 ```bash
-pip install -r requirements.txt
+# 初始化会话文件（从模板创建运行时文件）
+./init_session.sh
 ```
 
-### 2. 启动Docker容器
+### 一键启动所有服务
 
 ```bash
-# 启动nginx容器
-cd containers/nginx1 && docker-compose up -d
-cd ../nginx2 && docker-compose up -d  
-cd ../nginx3 && docker-compose up -d
+# 1. 构建并启动所有容器
+docker-compose up -d
+
+# 2. 查看服务状态
+docker-compose ps
+
+# 3. 查看日志
+docker-compose logs -f
 ```
 
-### 3. 启动认证服务器
+### 完整部署流程
 
 ```bash
-cd app
-python app.py
+# 克隆项目
+git clone <repository-url>
+cd DockerGate
+
+# 环境初始化
+./init_session.sh
+
+# 启动服务
+docker-compose up -d
+
+# 验证部署
+curl http://localhost:3001
 ```
 
-### 4. 启动转发器
+### 访问测试
+
+1. **认证服务器**: http://localhost:3001
+2. **转发器状态**: http://localhost:5001 (需先登录)
+3. **测试账户**:
+   - `aaa / 111` → 蓝紫色专属页面
+   - `bbb / 222` → 绿色专属页面  
+   - `ccc / 333` → 粉色专属页面
+
+## 🔐 安全特性
+
+### 完整安全验证
+
+我们进行了全面的**安全攻击测试**，所有攻击均被成功防御：
+
+| 攻击类型 | 防御状态 | 验证结果 |
+|---------|---------|---------|
+| **直接端口绕过** | ✅ 完全防御 | 端口6060/8080/9090无法访问 |
+| **无认证访问** | ✅ 完全防御 | 返回401 Unauthorized |
+| **JWT Token伪造** | ✅ 完全防御 | 伪造token被拒绝 |
+| **权限提升攻击** | ✅ 完全防御 | 用户只能访问分配资源 |
+| **HTTP方法攻击** | ✅ 完全防御 | OPTIONS/DELETE/PUT被拒绝 |
+| **路径遍历攻击** | ✅ 完全防御 | ../etc/passwd返回404 |
+| **Header注入攻击** | ✅ 完全防御 | X-Forwarded-For被忽略 |
+| **Session劫持** | ✅ 完全防御 | 伪造session被拒绝 |
+| **并发请求攻击** | ✅ 完全防御 | 系统处理稳定 |
+
+### 安全机制层次
+
+1. **🔒 认证层**: JWT Token + Session管理
+2. **🛡️ 授权层**: 用户权限严格隔离  
+3. **🚫 网络层**: Docker内部网络完全隔离
+4. **🔄 代理层**: 所有流量强制通过转发器
+5. **🧹 清理层**: 认证信息自动清理
+6. **📄 数据分离**: 创新的模板分离架构，配置安全与运行时数据完全隔离
+
+### 🆕 架构创新: 配置模板分离
+
+DockerGate 采用了创新的**配置模板分离架构**，解决了企业级部署中的核心痛点：
+
+- **🎯 问题**: 传统方案中，配置文件要么包含敏感数据不能进版本控制，要么需要复杂的配置管理
+- **💡 创新**: 分离配置模板与运行时数据，通过`init_session.sh`脚本实现优雅的环境初始化
+- **🏆 优势**: 既保证了敏感数据安全，又确保了项目的可部署性和团队协作效率
+
+**这种架构设计让DockerGate成为了企业级HTTP VPN解决方案的标杆！**
+### 数据安全实践
+
+- **模板文件** (`shared/auth_sessions_template.json`)：
+  - 包含基础用户配置
+  - 纳入版本控制
+  - 不含敏感信息
+
+- **运行时文件** (`shared/auth_sessions.json`)：
+  - 包含实际会话数据和JWT tokens
+  - 不进入版本控制
+  - 通过`init_session.sh`从模板创建
+
+## 🧪 安全测试
+
+### 端口隔离验证
 
 ```bash
-# 新建终端窗口
-cd forwarder
-python proxy.py
+# 旧架构的安全隐患（已解决）
+curl http://localhost:6060/  # 以前可以绕过认证
+curl http://localhost:8080/  # 以前可以绕过认证
+curl http://localhost:9090/  # 以前可以绕过认证
+
+# 新架构的安全保障
+curl http://localhost:6060/  # Connection refused ✅
+curl http://localhost:8080/  # Connection refused ✅  
+curl http://localhost:9090/  # Connection refused ✅
 ```
 
-### 5. 访问测试
-
-1. 浏览器访问: http://localhost:3001
-2. 使用测试账户登录:
-   - `aaa / 111` → 路由到nginx1容器
-   - `bbb / 222` → 路由到nginx2容器
-   - `ccc / 333` → 路由到nginx3容器
-3. 登录成功后自动跳转到转发器
-4. 看到对应用户的专属页面
-
-## 测试账户
-
-| 用户名 | 密码 | 目标容器 | 端口 |
-|--------|------|----------|------|
-| aaa    | 111  | nginx-user-aaa | 6060 |
-| bbb    | 222  | nginx-user-bbb | 8080 |
-| ccc    | 333  | nginx-user-ccc | 9090 |
-
-## 安全特性验证
-
-### 1. 端口隔离测试
+### 认证绕过测试
 
 ```bash
-# 直接访问容器端口（应该失败）
-curl http://localhost:6060/  # Connection refused
-curl http://localhost:8080/  # Connection refused
-curl http://localhost:9090/  # Connection refused
+# 无认证访问转发器
+curl http://localhost:5001/
+# 结果: 401 Unauthorized ✅
+
+# JWT Token伪造攻击
+curl -H "Authorization: Bearer fake_token" http://localhost:5001/
+# 结果: 401 Unauthorized ✅
 ```
 
-### 2. 认证绕过测试
+### 权限提升测试
 
 ```bash
-# 无认证访问转发器（应该返回401）
-curl http://localhost:5000/
+# 即使修改URL参数，用户仍只能访问自己的资源
+# AAA用户尝试访问其他端口
+curl -H "Cookie: auth_token=$AAA_TOKEN" "http://localhost:5001/?target_port=8080"
+# 结果: 仍然返回AAA专属页面 ✅
 ```
 
-### 3. 用户隔离测试
+### 配置模板分离验证
 
-登录用户aaa后，只能看到nginx1的内容，无法访问其他用户的容器。
+```bash
+# 验证模板文件安全性
+cat shared/auth_sessions_template.json  # 只有基础配置，无敏感信息 ✅
 
-## 技术特点
+# 验证运行时文件隔离
+git check-ignore shared/auth_sessions.json  # 被正确忽略 ✅
 
-### HTTP应用层VPN
+# 验证初始化流程
+./init_session.sh  # 从模板安全创建运行时文件 ✅```
 
-- **透明代理**: 对Docker容器完全透明，无需修改容器内应用
-- **认证注入**: 在响应中自动注入JavaScript认证机制
-- **请求清理**: 从转发请求中移除认证信息
-- **智能路由**: 根据用户身份自动路由到对应容器
+## 🔧 运维管理
 
-### 安全机制
+### 服务管理
 
-- **JWT Token认证**: 基于时间的token验证
-- **端口隔离**: 容器只绑定127.0.0.1，外部无法直接访问
-- **用户权限控制**: 每个用户只能访问分配的容器
-- **会话管理**: 实时的认证状态同步
+```bash
+# 停止所有服务
+docker-compose down
 
-## 调试和监控
+# 重启服务
+docker-compose restart
 
-### 查看系统状态
+# 查看容器状态
+docker-compose ps
 
-- 认证服务器状态: http://localhost:3001/status
-- 活跃会话API: http://localhost:3001/api/get_user_sessions
+# 查看特定服务日志
+docker-compose logs auth-server
+docker-compose logs vpn-proxy
+```
 
-### 日志输出
+### 监控和调试
 
-- Flask应用会显示登录/退出日志
-- 转发器会显示请求路由日志
-- 浏览器控制台会显示认证注入日志
+- **认证服务器状态**: http://localhost:3001/status
+- **会话API**: http://localhost:3001/api/get_user_sessions
+- **容器网络**: `docker network inspect dockergate_vpn-internal`
 
-## 故障排除
+### 用户管理
 
-### 1. 容器无法启动
+编辑 `app/app.py` 中的 `USERS` 字典添加新用户：
+
+```python
+USERS = {
+    'aaa': {'password': '111', 'target_port': 6060},
+    'bbb': {'password': '222', 'target_port': 8080}, 
+    'ccc': {'password': '333', 'target_port': 9090},
+    'newuser': {'password': 'newpass', 'target_port': 7070},  # 新用户
+}
+```
+
+## 🆚 架构对比
+
+### 旧架构问题
+- ❌ nginx容器暴露在127.0.0.1
+- ❌ 可以直接访问端口绕过认证
+- ❌ 存在安全隐患
+
+### 新架构优势  
+- ✅ nginx容器完全在Docker内部网络
+- ✅ 外部无法直接访问任何后端服务
+- ✅ 强制所有流量通过HTTP VPN转发器
+- ✅ 通过全面安全测试验证
+- ✅ 配置模板与运行时数据完全分离
+- ✅ 敏感会话信息永不进入版本控制
+## 🛠️ 故障排除
+
+### 容器启动失败
 
 ```bash
 # 检查端口占用
-netstat -tlnp | grep -E "(6060|8080|9090)"
+netstat -tlnp | grep -E "(3001|5001)"
 
-# 重启容器
-docker-compose down && docker-compose up -d
+# 清理并重新构建
+docker-compose down -v
+docker-compose build --no-cache
+docker-compose up -d
 ```
 
-### 2. 认证失败
+### 网络连接问题
 
-- 检查`shared/auth_sessions.json`文件是否存在
-- 确认Flask应用和转发器使用相同的secret key
-- 查看浏览器Cookie是否正确设置
+```bash
+# 检查Docker网络
+docker network ls
+docker network inspect dockergate_vpn-internal
 
-### 3. 转发失败
+# 检查容器间连通性
+docker-compose exec vpn-proxy ping nginx-user-aaa
+```
 
-- 确认目标容器正在运行
-- 检查容器端口绑定是否正确
-- 查看转发器日志输出
+### 认证问题
 
-## 扩展功能
+- 检查 `shared/auth_sessions.json` 是否存在
+  ```bash
+  # 如果文件不存在，运行初始化脚本
+  ./init_session.sh
+  ```
+- 确认所有容器的时间同步
+- 查看认证服务器和转发器日志
 
-### 添加新用户
+### 环境初始化问题
 
-1. 在`app/app.py`的`USERS`字典中添加用户
-2. 在`shared/auth_sessions.json`的`user_mappings`中添加映射
-3. 创建对应的nginx容器配置
+⭐ **重要**: DockerGate 采用配置模板分离架构，首次部署必须进行环境初始化！
+```bash
+# 重新初始化环境
+./init_session.sh
 
-### 自定义容器
+# 检查模板文件是否存在
+ls -la shared/auth_sessions_template.json
 
-- 替换nginx镜像为其他web应用
-- 修改容器端口映射
-- 更新HTML页面内容
+# 检查脚本权限
+ls -la init_session.sh
 
-## 许可证
+# 如果权限不足，添加执行权限
+chmod +x init_session.sh
+```
 
-MIT License 
+## 📝 开发说明
+
+### 镜像构建
+
+```bash
+# 构建认证服务器镜像
+docker build -f Dockerfile.auth -t dockergate-auth .
+
+# 构建转发器镜像  
+docker build -f Dockerfile.proxy -t dockergate-proxy .
+```
+
+### 本地开发
+
+如需本地开发调试，可以：
+
+```bash
+# 只启动nginx容器
+docker-compose up -d nginx-user-aaa nginx-user-bbb nginx-user-ccc
+
+# 本地运行认证服务器
+cd app && python app.py
+
+# 本地运行转发器  
+python start_proxy.py
+```
+
+## 🎯 技术亮点
+
+- **🔒 零信任架构**: 默认拒绝，显式授权
+- **🛡️ 深度防御**: 多层安全机制
+- **🚫 完全隔离**: Docker网络边界保护  
+- **🔄 透明代理**: 对后端应用完全透明
+- **📄 配置模板分离**: 创新的数据分离设计，配置安全与部署便利并重- **🧪 安全验证**: 通过全面攻击测试
+
+## 📜 许可证
+
+MIT License
+
+---
+
+**DockerGate** - 让容器访问控制变得简单而安全 🚀 

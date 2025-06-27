@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  # HTTP VPN 认证服务器
+  auth-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.auth
+    container_name: http-vpn-auth
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./shared:/app/shared
+    environment:
+      - FLASK_ENV=development
+    networks:
+      - vpn-internal
+    restart: unless-stopped
+
+  # HTTP VPN 转发器
+  vpn-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.proxy
+    container_name: http-vpn-proxy
+    ports:
+      - "5001:5001"  # 只暴露转发器端口
+    volumes:
+      - ./shared:/app/shared
+    networks:
+      - vpn-internal
+    depends_on:
+      - nginx-user-aaa
+      - nginx-user-bbb
+      - nginx-user-ccc
+      - auth-server
+    restart: unless-stopped
+
+  # 用户AAA专属nginx容器
+  nginx-user-aaa:
+    image: docker.m.daocloud.io/nginx
+    container_name: nginx-user-aaa
+    expose:
+      - "80"  # 只在内部网络暴露，不暴露到宿主机
+    volumes:
+      - ./containers/nginx1/html:/usr/share/nginx/html
+    networks:
+      - vpn-internal
+    restart: unless-stopped
+
+  # 用户BBB专属nginx容器
+  nginx-user-bbb:
+    image: docker.m.daocloud.io/nginx
+    container_name: nginx-user-bbb
+    expose:
+      - "80"  # 只在内部网络暴露，不暴露到宿主机
+    volumes:
+      - ./containers/nginx2/html:/usr/share/nginx/html
+    networks:
+      - vpn-internal
+    restart: unless-stopped
+
+  # 用户CCC专属nginx容器
+  nginx-user-ccc:
+    image: docker.m.daocloud.io/nginx
+    container_name: nginx-user-ccc
+    expose:
+      - "80"  # 只在内部网络暴露，不暴露到宿主机
+    volumes:
+      - ./containers/nginx3/html:/usr/share/nginx/html
+    networks:
+      - vpn-internal
+    restart: unless-stopped
+
+networks:
+  vpn-internal:
+    driver: bridge
+    # 不设置internal: true，因为需要对外提供服务 

@@ -119,7 +119,7 @@ def login():
     print(f"用户 {username} 登录成功，会话ID: {session_id}")
     
     # 设置Cookie并跳转到转发器
-    response = make_response(redirect('http://localhost:5000/dashboard'))
+    response = make_response(redirect('http://localhost:5001/dashboard'))
     response.set_cookie(
         'auth_token', 
         token, 

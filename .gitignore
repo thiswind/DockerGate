@@ -1,0 +1,177 @@
+# DockerGate HTTP VPN 项目 .gitignore
+
+# ===========================================
+# Python 相关
+# ===========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# ===========================================
+# 环境变量和配置
+# ===========================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ===========================================
+# 系统文件
+# ===========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*~
+
+# ===========================================
+# IDE 和编辑器
+# ===========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.sublime-project
+.sublime-workspace
+
+# ===========================================
+# 日志文件
+# ===========================================
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ===========================================
+# DockerGate 项目特定文件
+# ===========================================
+
+# 测试过程中产生的cookie文件
+cookies*.txt
+cookies_*.txt
+
+# 用户会话数据 (敏感信息)
+shared/auth_sessions.json
+
+# 临时markdown文件
+cursor*.md
+cursor_*.md
+
+# 备份文件
+*.bak
+*.backup
+*.tmp
+
+# ===========================================
+# Docker 相关 (运行时文件)
+# ===========================================
+# 注意：我们保留 Dockerfile.* 和 docker-compose.yml 因为它们是配置文件
+# 但忽略运行时产生的文件
+
+# Docker数据卷(如果有本地挂载)
+.docker-volumes/
+docker-data/
+
+# Docker构建缓存(如果有)
+.dockerignore.bak
+
+# ===========================================
+# 其他临时文件
+# ===========================================
+*.pid
+*.seed
+*.pid.lock
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# 压缩文件
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# ===========================================
+# 项目特定的测试输出
+# ===========================================
+test-results/
+test-output/
+
+# 如果有SSL证书文件
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# 如果有数据库文件
+*.db
+*.sqlite
+*.sqlite3
+
+# 备注：
+# - shared/auth_sessions.json 包含用户会话信息，应该忽略
+# - cookies_*.txt 是测试时产生的临时文件，应该忽略
+# - 保留 Dockerfile.auth, Dockerfile.proxy, docker-compose.yml 等配置文件
+# - 保留 requirements.txt, start_proxy.py 等项目文件 

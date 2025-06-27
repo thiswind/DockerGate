@@ -1,0 +1,17 @@
+{
+  "sessions": {},
+  "user_mappings": {
+    "aaa": {
+      "target_port": 6060,
+      "container_name": "nginx-user-aaa"
+    },
+    "bbb": {
+      "target_port": 8080,
+      "container_name": "nginx-user-bbb"
+    },
+    "ccc": {
+      "target_port": 9090,
+      "container_name": "nginx-user-ccc"
+    }
+  }
+} 

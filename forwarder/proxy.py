@@ -41,13 +41,18 @@ class HTTPVPNProxy:
             server_socket.listen(10)
             
             print("=" * 60)
-            print("HTTP VPN 转发器启动成功")
+            print("HTTP VPN 转发器启动成功 (容器化模式)")
             print("=" * 60)
             print(f"监听端口: {self.listen_port}")
             print("用户路由映射:")
-            print("  aaa → 127.0.0.1:6060 (nginx-user-aaa)")
-            print("  bbb → 127.0.0.1:8080 (nginx-user-bbb)")
-            print("  ccc → 127.0.0.1:9090 (nginx-user-ccc)")
+            print("  aaa → nginx-user-aaa:80 (容器内部)")
+            print("  bbb → nginx-user-bbb:80 (容器内部)")
+            print("  ccc → nginx-user-ccc:80 (容器内部)")
+            print("")
+            print("安全特性:")
+            print("  🔒 nginx容器完全不暴露到宿主机")
+            print("  🛡️ 只能通过转发器访问")
+            print("  🚫 127.0.0.1绕过已被阻止")
             print("")
             print("访问方式:")
             print("  1. 先在 http://localhost:3001 登录")
@@ -351,9 +356,24 @@ class HTTPVPNProxy:
                            clean_request: str, username: str):
         """转发请求到目标容器"""
         try:
-            # 连接到目标容器
+            # 端口到容器名的映射
+            container_mapping = {
+                6060: 'nginx-user-aaa',
+                8080: 'nginx-user-bbb',
+                9090: 'nginx-user-ccc'
+            }
+            
+            container_name = container_mapping.get(target_port)
+            if not container_name:
+                print(f"未找到端口 {target_port} 对应的容器")
+                self.send_error_response(client_socket, 500, "Internal Server Error")
+                return
+            
+            # 通过容器名连接到目标容器（Docker内部网络）
             target_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            target_socket.connect(('127.0.0.1', target_port))
+            target_socket.connect((container_name, 80))  # 连接容器内部的80端口
+            
+            print(f"[容器连接] {username} → {container_name}:80")
             
             # 发送清理后的请求
             target_socket.send(clean_request.encode('utf-8'))
@@ -370,7 +390,7 @@ class HTTPVPNProxy:
                 self.send_error_response(client_socket, 502, "Bad Gateway")
                 
         except ConnectionRefusedError:
-            print(f"无法连接到容器端口 {target_port}")
+            print(f"无法连接到容器 {container_name}")
             self.send_error_response(client_socket, 503, "Service Unavailable")
         except Exception as e:
             print(f"转发请求时出错: {e}")
